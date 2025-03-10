@@ -9,6 +9,7 @@ from text2speech import    synthesis_text_to_speech_and_play_by_streaming_mode
 from text2action import    Text2Aciton
 mic = None
 stream = None
+stream_on = False
 
 # Set recording parameters
 sample_rate = 16000  # sampling rate (Hz)
@@ -33,7 +34,8 @@ def init_dashscope_api_key():
         dashscope.api_key = 'sk-fa5d1a77deb04894aa7f1b6984589214'  # set API-key manually
 
 
-
+#这里是speech2text的callback
+#在on_event中对完整的句子中的text处理，并且调用text2action以及text2speech
 class Callback(RecognitionCallback):
     def on_open(self) -> None:
         global mic
@@ -48,12 +50,14 @@ class Callback(RecognitionCallback):
     def on_close(self) -> None:
         global mic
         global stream
+        global stream_on
         print('RecognitionCallback close.')
         stream.stop_stream()
         stream.close()
         mic.terminate()
         stream = None
         mic = None
+        stream_on = False
 
     def on_complete(self) -> None:
         print('RecognitionCallback completed.')  # translation completed
@@ -68,6 +72,7 @@ class Callback(RecognitionCallback):
         # Forcefully exit the program
         sys.exit(1)
     def on_event(self, result: RecognitionResult) -> None:
+        global stream
         sentence = result.get_sentence()
         if 'text' in sentence:
             # print('RecognitionCallback text: ', sentence['text'])
@@ -75,52 +80,28 @@ class Callback(RecognitionCallback):
                 # print(
                 #     'RecognitionCallback sentence end, request_id:%s, usage:%s'
                 #     % (result.get_request_id(), result.get_usage(sentence)))
-                text = result.get_sentence()['text']
-                myLLM.user_input(text)
+                myLLM.user_input(sentence['text'])
                 assistant_output = myLLM.get_response().choices[0].message.content
                 myLLM.assistant_input(assistant_output)
-                print(assistant_output)
-                if assistant_output:
-                    synthesis_text_to_speech_and_play_by_streaming_mode(text=assistant_output)
+                # 系统外放的时候需要关闭麦，不然会将外放的声音再输入
+                if stream.is_active():
+                    stream.stop_stream()  # 先检查是否活跃再停止
+                synthesis_text_to_speech_and_play_by_streaming_mode(text=assistant_output)
+                stream.start_stream()
+                # print(assistant_output)
+                if "再见" in assistant_output:
+                    self.on_close()
+                # if "再见" in sentence['text']:
+                #     stream_on = False
+                #     self.on_close()
 
-
-def signal_handler(sig, frame):
-    print('Ctrl+C pressed, stop translation ...')
-    # Stop translation
-    recognition.stop()
-    print('Translation stopped.')
-    print(
-        '[Metric] requestId: {}, first package delay ms: {}, last package delay ms: {}'
-        .format(
-            recognition.get_last_request_id(),
-            recognition.get_first_package_delay(),
-            recognition.get_last_package_delay(),
-        ))
-    # Forcefully exit the program
-    sys.exit(0)
-
-class vla():
+# 这里是model是一个speech2text，然后再text中调用text2text和text2speech
+class speech2action():
     def __init__(self):
-        self.client = OpenAI(
-            api_key="sk-fa5d1a77deb04894aa7f1b6984589214",
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        )
-        self.completion = self.client.chat.completions.create(
-            model="qwen-max",  # 此处以qwen-plus为例，可按需更换模型名称。模型列表：https://help.aliyun.com/zh/model-studio/getting-started/models
-            messages=[
-                {'role': 'system', 'content': 'You are a helpful assistant.'},
-                {'role': 'user', 'content': '你是谁？'}],
-        )
-
-if __name__ == "__main__":
-
-    init_dashscope_api_key()
-    print('Initializing...')
-
-    callback = Callback()
-    # Call recognition service by async mode, you can customize the recognition parameters, like model, format,
-    # sample_rate For more information, please refer to https://help.aliyun.com/document_detail/2712536.html
-    recognition = Recognition(
+        init_dashscope_api_key()
+        print('Initializing...')
+        self.callback = Callback()
+        self.recognition = Recognition(
         model='paraformer-realtime-8k-v2',
         # 'paraformer-realtime-v1'、'paraformer-realtime-8k-v1'
         format=format_pcm,
@@ -128,21 +109,47 @@ if __name__ == "__main__":
         sample_rate=sample_rate,
         # support 8000, 16000
         semantic_punctuation_enabled=False,
-        callback=callback)
-    # Start translation
-    recognition.start()
+        callback=self.callback)
+        # Start translation
+        self.recognition.start()
 
-    signal.signal(signal.SIGINT, signal_handler)
-    print("Press 'Ctrl+C' to stop recording and translation...")
+    # def signal_handler(self,sig, frame):
+    #     print('Ctrl+C pressed, stop translation ...')
+    #     # Stop translation
+    #     self.recognition.stop()
+    #     print('Translation stopped.')
+    #     print(
+    #         '[Metric] requestId: {}, first package delay ms: {}, last package delay ms: {}'
+    #         .format(
+    #             self.recognition.get_last_request_id(),
+    #             self.recognition.get_first_package_delay(),
+    #             self.recognition.get_last_package_delay(),
+    #         ))
+    #     # Forcefully exit the program
+    #     sys.exit(0)
 
-    while True:
-        if stream:
-            data = stream.read(3200, exception_on_overflow=False)
-            recognition.send_audio_frame(data)
-        else:
-            break
+    def go(self):
+        global stream_on
+        stream_on = True
+        # signal.signal(signal.SIGINT, self.signal_handler)
 
-    recognition.stop()
+        while True:
+            print(123)
+            if stream:
+                data = stream.read(3200, exception_on_overflow=False)
+                self.recognition.send_audio_frame(data)
+            else:
+                break
+        # while stream_on:
+        #     print(123)
+        print('end1')
+        self.recognition.stop()
+        print('end')
+
+
+if __name__ == "__main__":
+    myS2A = speech2action()
+    myS2A.go()
 
 
 
