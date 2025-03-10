@@ -153,6 +153,19 @@
      <string>State6</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="LLM_pushButton">
+    <property name="geometry">
+     <rect>
+      <x>390</x>
+      <y>70</y>
+      <width>81</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>LLM</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QMenuBar" name="menuBar">
@@ -161,7 +174,7 @@
      <x>0</x>
      <y>0</y>
      <width>500</width>
-     <height>22</height>
+     <height>26</height>
     </rect>
    </property>
   </widget>

@@ -5,7 +5,9 @@ import serial.tools.list_ports
 
 from PyQt5.QtWidgets import QMainWindow
 from window import Ui_MainWindow
+from PyQt5.QtCore import QTimer
 
+import speech2action
 Host_Address = '0f00'
 Broadcast_Address = 'ffff'
 
@@ -17,11 +19,10 @@ RXD_HEAD = 'f1dd'
 CMD_Report_ID = '03'
 CMD_Start_Group = '04'
 CMD_Stop_Group = '05'
-
-
+myLLM=speech2action.speech2action()
 class My_MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
-        super(My_MainWindow, self).__init__()
+        super(My_MainWindow,self).__init__()
 
         self.port = None
         self.host = None
@@ -31,6 +32,11 @@ class My_MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)  # 创建窗体对象
 
         self.Cluster_Init()  # 集群初始化
+
+        self.timer = QTimer(self)  # 创建一个定时器
+
+        self.State_last=0
+
 
     def Cluster_Init(self):
         self.Start_pushButton.clicked.connect(self.Cluster_Start)
@@ -43,10 +49,12 @@ class My_MainWindow(QMainWindow, Ui_MainWindow):
         self.State_pushButton4.clicked.connect(self.Cluster_State4)
         self.State_pushButton5.clicked.connect(self.Cluster_State5)
         self.State_pushButton6.clicked.connect(self.Cluster_State6)
+        self.LLM_pushButton.clicked.connect(self.LLM_On)
 
         self.Start_pushButton.setEnabled(True)
         self.Refresh_pushButton.setEnabled(True)
         self.Stop_pushButton.setEnabled(False)
+        # self.LLM_pushButton.setEnabled(False)
         self.State_pushButton1.setEnabled(False)
         self.State_pushButton2.setEnabled(False)
         self.State_pushButton3.setEnabled(False)
@@ -83,6 +91,7 @@ class My_MainWindow(QMainWindow, Ui_MainWindow):
             self.State_pushButton4.setEnabled(True)
             self.State_pushButton5.setEnabled(True)
             self.State_pushButton6.setEnabled(True)
+            self.LLM_pushButton.setEnabled(True)
         else:
             self.State_textBrowser.append('WARN: 未发现串口设备')
 
@@ -247,3 +256,23 @@ class My_MainWindow(QMainWindow, Ui_MainWindow):
             self.State_textBrowser.append('INFO: 控制指令6发送')
         else:
             self.State_textBrowser.append('ERROR: 串口断开')
+
+    def LLM_On(self):
+        myLLM.go()
+        self.timer.timeout.connect(self.state2action)
+
+        # 启动定时器，每隔触发一次
+        self.timer.start(1000)
+    def state2action(self):
+        if speech2action.State!=self.State_last:
+            self.State_last=speech2action.State
+            state_str="INFO: 控制指令"+str(self.State_last)+"发送"
+            self.State_textBrowser.append(state_str)
+            # if self.State_last==1:
+            #     self.Cluster_State1()
+            # if self.State_last==2:
+            #     self.Cluster_State2()
+            # if self.State_last==3:
+            #     self.Cluster_State3()
+            # if self.State_last==4:
+            #     self.Cluster_State4()

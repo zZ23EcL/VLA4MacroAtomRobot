@@ -1,6 +1,7 @@
 import os
 import sys
 from openai import OpenAI
+import threading
 import pyaudio
 import dashscope
 from dashscope.audio.asr import *
@@ -21,6 +22,8 @@ block_size = 3200  # number of frames per buffer
 #文本模型
 myLLM=Text2Aciton()
 
+# 全局状态
+State=0
 def init_dashscope_api_key():
     """
         Set your DashScope API-key. More information:
@@ -73,6 +76,7 @@ class Callback(RecognitionCallback):
         sys.exit(1)
     def on_event(self, result: RecognitionResult) -> None:
         global stream
+        global State
         sentence = result.get_sentence()
         if 'text' in sentence:
             # print('RecognitionCallback text: ', sentence['text'])
@@ -84,17 +88,26 @@ class Callback(RecognitionCallback):
                 assistant_output = myLLM.get_response().choices[0].message.content
                 myLLM.assistant_input(assistant_output)
                 # 系统外放的时候需要关闭麦，不然会将外放的声音再输入
-                if stream.is_active():
-                    stream.stop_stream()  # 先检查是否活跃再停止
+                # if stream.is_active():
+                #     stream.stop_stream()  # 先检查是否活跃再停止
+                # stream.stop_stream()  # 先检查是否活跃再停止
                 synthesis_text_to_speech_and_play_by_streaming_mode(text=assistant_output)
-                stream.start_stream()
+                # stream.start_stream()
                 # print(assistant_output)
+                if "状态1" in assistant_output:
+                    State=1
+                if "状态2" in assistant_output:
+                    State=2
+                if "状态3" in assistant_output:
+                    State=3
+                if "状态4" in assistant_output:
+                    State=4
                 if "再见" in assistant_output:
                     self.on_close()
+                assistant_output=[]
                 # if "再见" in sentence['text']:
                 #     stream_on = False
                 #     self.on_close()
-
 # 这里是model是一个speech2text，然后再text中调用text2text和text2speech
 class speech2action():
     def __init__(self):
@@ -129,22 +142,19 @@ class speech2action():
     #     sys.exit(0)
 
     def go(self):
-        global stream_on
-        stream_on = True
-        # signal.signal(signal.SIGINT, self.signal_handler)
 
-        while True:
-            print(123)
-            if stream:
-                data = stream.read(3200, exception_on_overflow=False)
-                self.recognition.send_audio_frame(data)
-            else:
-                break
-        # while stream_on:
-        #     print(123)
-        print('end1')
-        self.recognition.stop()
-        print('end')
+        def run():
+            while True:
+                if stream:
+                    data = stream.read(3200, exception_on_overflow=True)
+                    self.recognition.send_audio_frame(data)
+                else:
+                    break
+            self.recognition.stop()
+            print('end')
+
+        thread = threading.Thread(target=run)
+        thread.start()
 
 
 if __name__ == "__main__":
